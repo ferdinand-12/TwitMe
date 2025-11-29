@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tweet_model.dart';
@@ -87,23 +88,18 @@ class TweetCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    tweet.content,
-                    style: const TextStyle(fontSize: 15, height: 1.4),
-                  ),
+
+                  const SizedBox(height: 8),
+                  Text(tweet.content),
+
                   if (tweet.images.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        tweet.images.first,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: 200,
-                      ),
+                      child: _buildImage(tweet.images.first),
                     ),
                   ],
+
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -112,10 +108,18 @@ class TweetCard extends StatelessWidget {
                         icon: Icons.chat_bubble_outline,
                         count: tweet.replies,
                         color: Colors.grey[600]!,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  TweetDetailScreen(tweet: tweet),
+                            ),
+                          );
+                        },
                       ),
                       _ActionButton(
-                        icon: tweet.isRetweeted ? Icons.repeat : Icons.repeat,
+                        icon: Icons.repeat,
                         count: tweet.retweets,
                         color: tweet.isRetweeted
                             ? Colors.green
@@ -180,6 +184,40 @@ class TweetCard extends StatelessWidget {
     if (diff.inHours > 0) return '${diff.inHours}j';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';
     return 'Baru saja';
+  }
+
+  Widget _buildImage(String imagePath) {
+    // Check if it's a local file path
+    if (imagePath.startsWith('/') ||
+        imagePath.startsWith('file://') ||
+        !imagePath.startsWith('http')) {
+      return Image.file(
+        File(imagePath.replaceAll('file://', '')),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 200,
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.broken_image, size: 50)),
+          );
+        },
+      );
+    } else {
+      // Network image
+      return Image.network(
+        imagePath,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 200,
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.broken_image, size: 50)),
+          );
+        },
+      );
+    }
   }
 
   void _showOptionsMenu(BuildContext context) {

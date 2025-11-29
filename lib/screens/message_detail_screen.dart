@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/message_provider.dart';
+import '../providers/auth_provider.dart';
 
 class MessageDetailScreen extends StatefulWidget {
+  final int receiverId;
   final String userName;
   final String username;
   final String userImage;
 
   const MessageDetailScreen({
     Key? key,
+    required this.receiverId,
     required this.userName,
     required this.username,
     required this.userImage,
@@ -18,47 +23,72 @@ class MessageDetailScreen extends StatefulWidget {
 
 class _MessageDetailScreenState extends State<MessageDetailScreen> {
   final _messageController = TextEditingController();
-  final List<Map<String, dynamic>> _messages = [];
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    // Load initial messages
-    _messages.addAll([
-      {
-        'text': 'Hai! Apa kabar?',
-        'isMe': false,
-        'time': DateTime.now().subtract(const Duration(hours: 2)),
-      },
-      {
-        'text': 'Baik, terima kasih! Kamu bagaimana?',
-        'isMe': true,
-        'time': DateTime.now().subtract(const Duration(hours: 1, minutes: 55)),
-      },
-    ]);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadMessages();
+    });
+  }
+
+  Future<void> _loadMessages() async {
+    final authProvider = context.read<AuthProvider>();
+    final messageProvider = context.read<MessageProvider>();
+
+    if (authProvider.currentUser != null) {
+      final currentUserId = int.parse(authProvider.currentUser!.id);
+      await messageProvider.loadMessages(currentUserId, widget.receiverId);
+      await messageProvider.markAsRead(widget.receiverId, currentUserId);
+      _scrollToBottom();
+    }
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
 
-    setState(() {
-      _messages.add({
-        'text': _messageController.text,
-        'isMe': true,
-        'time': DateTime.now(),
-      });
-    });
+    final content = _messageController.text;
     _messageController.clear();
+
+    final authProvider = context.read<AuthProvider>();
+    final messageProvider = context.read<MessageProvider>();
+
+    if (authProvider.currentUser != null) {
+      final currentUserId = int.parse(authProvider.currentUser!.id);
+      await messageProvider.sendMessage(
+        currentUserId,
+        widget.receiverId,
+        content,
+      );
+      _scrollToBottom();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final currentUserId = authProvider.currentUser != null
+        ? int.parse(authProvider.currentUser!.id)
+        : 0;
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -93,15 +123,33 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _buildMessageBubble(
-                  message['text'],
-                  message['isMe'],
-                  message['time'],
+            child: Consumer<MessageProvider>(
+              builder: (context, messageProvider, _) {
+                final messages = messageProvider.getMessages(
+                  currentUserId,
+                  widget.receiverId,
+                );
+
+                if (messages.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Mulai percakapan dengan ${widget.userName}',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    final isMe = message['senderId'] == currentUserId;
+                    final time = DateTime.parse(message['createdAt']);
+
+                    return _buildMessageBubble(message['content'], isMe, time);
+                  },
                 );
               },
             ),
@@ -134,12 +182,25 @@ class _MessageDetailScreenState extends State<MessageDetailScreen> {
                 color: isMe ? const Color(0xFF1DA1F2) : Colors.grey[300],
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Text(
-                text,
-                style: TextStyle(
-                  color: isMe ? Colors.white : Colors.black87,
-                  fontSize: 15,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    text,
+                    style: TextStyle(
+                      color: isMe ? Colors.white : Colors.black87,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${time.hour}:${time.minute.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                      color: isMe ? Colors.white70 : Colors.black54,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

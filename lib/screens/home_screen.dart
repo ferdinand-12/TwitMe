@@ -8,6 +8,7 @@ import 'search_screen.dart';
 import 'messages_screen.dart';
 import 'profile_screen.dart';
 import 'compose_tweet_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -59,10 +60,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     );
                   },
-                  child: const CircleAvatar(
-                    backgroundImage: NetworkImage(
-                      'https://i.pravatar.cc/150?img=1',
-                    ),
+                  child: Consumer<AuthProvider>(
+                    builder: (context, authProvider, _) {
+                      return CircleAvatar(
+                        backgroundImage: NetworkImage(
+                          authProvider.currentUser?.profileImage ??
+                              'https://i.pravatar.cc/150?img=1',
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -75,7 +81,14 @@ class _HomeScreenState extends State<HomeScreen> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.settings_outlined),
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             )

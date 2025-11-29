@@ -81,6 +81,19 @@ class DatabaseHelper {
       )
     ''');
 
+    // Retweeted tweets table
+    await db.execute('''
+      CREATE TABLE retweeted_tweets (
+        id $idType,
+        userId $intType,
+        tweetId $intType,
+        createdAt $textType,
+        FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (tweetId) REFERENCES tweets (id) ON DELETE CASCADE,
+        UNIQUE(userId, tweetId)
+      )
+    ''');
+
     // Messages table
     await db.execute('''
       CREATE TABLE messages (
@@ -92,6 +105,19 @@ class DatabaseHelper {
         isRead $intType DEFAULT 0,
         FOREIGN KEY (senderId) REFERENCES users (id) ON DELETE CASCADE,
         FOREIGN KEY (receiverId) REFERENCES users (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Comments table
+    await db.execute('''
+      CREATE TABLE comments (
+        id $idType,
+        tweetId $intType,
+        userId $intType,
+        content $textType,
+        createdAt $textType,
+        FOREIGN KEY (tweetId) REFERENCES tweets (id) ON DELETE CASCADE,
+        FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
       )
     ''');
   }
@@ -130,11 +156,37 @@ class DatabaseHelper {
     return await db.update('users', user, where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<List<Map<String, dynamic>>> getAllUsers(int currentUserId) async {
+    final db = await database;
+    return await db.query(
+      'users',
+      where: 'id != ?',
+      whereArgs: [currentUserId],
+      orderBy: 'displayName ASC',
+    );
+  }
+
   // ==================== TWEET OPERATIONS ====================
 
   Future<int> createTweet(Map<String, dynamic> tweet) async {
     final db = await database;
     return await db.insert('tweets', tweet);
+  }
+
+  Future<void> batchInsertTweets(List<Map<String, dynamic>> tweets) async {
+    final db = await database;
+    final batch = db.batch();
+    for (var tweet in tweets) {
+      batch.insert('tweets', tweet);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<bool> hasTweets() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM tweets');
+    final count = Sqflite.firstIntValue(result) ?? 0;
+    return count > 0;
   }
 
   Future<List<Map<String, dynamic>>> getAllTweets() async {
@@ -248,6 +300,105 @@ class DatabaseHelper {
     );
   }
 
+  // ==================== RETWEET OPERATIONS ====================
+
+  Future<int> retweetTweet(int userId, int tweetId) async {
+    final db = await database;
+    return await db.insert('retweeted_tweets', {
+      'userId': userId,
+      'tweetId': tweetId,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  Future<int> unretweetTweet(int userId, int tweetId) async {
+    final db = await database;
+    return await db.delete(
+      'retweeted_tweets',
+      where: 'userId = ? AND tweetId = ?',
+      whereArgs: [userId, tweetId],
+    );
+  }
+
+  Future<bool> isTweetRetweeted(int userId, int tweetId) async {
+    final db = await database;
+    final results = await db.query(
+      'retweeted_tweets',
+      where: 'userId = ? AND tweetId = ?',
+      whereArgs: [userId, tweetId],
+    );
+    return results.isNotEmpty;
+  }
+
+  Future<List<Map<String, dynamic>>> getRetweetedTweetsByUserId(
+    int userId,
+  ) async {
+    final db = await database;
+    return await db.rawQuery(
+      '''
+      SELECT 
+        tweets.*,
+        users.id as userId,
+        users.username,
+        users.displayName,
+        users.profileImage,
+        users.isVerified,
+        retweeted_tweets.createdAt as retweetedAt
+      FROM tweets
+      INNER JOIN users ON tweets.userId = users.id
+      INNER JOIN retweeted_tweets ON tweets.id = retweeted_tweets.tweetId
+      WHERE retweeted_tweets.userId = ?
+      ORDER BY retweeted_tweets.createdAt DESC
+    ''',
+      [userId],
+    );
+  }
+
+  // ==================== COMMENT OPERATIONS ====================
+
+  Future<int> createComment(Map<String, dynamic> comment) async {
+    final db = await database;
+    return await db.insert('comments', comment);
+  }
+
+  Future<List<Map<String, dynamic>>> getCommentsByTweetId(int tweetId) async {
+    final db = await database;
+    return await db.rawQuery(
+      '''
+      SELECT 
+        comments.*,
+        users.username,
+        users.displayName,
+        users.profileImage,
+        users.isVerified
+      FROM comments
+      INNER JOIN users ON comments.userId = users.id
+      WHERE comments.tweetId = ?
+      ORDER BY comments.createdAt ASC
+    ''',
+      [tweetId],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getRepliesByUserId(int userId) async {
+    final db = await database;
+    return await db.rawQuery(
+      '''
+      SELECT 
+        comments.*,
+        users.username,
+        users.displayName,
+        users.profileImage,
+        users.isVerified
+      FROM comments
+      INNER JOIN users ON comments.userId = users.id
+      WHERE comments.userId = ?
+      ORDER BY comments.createdAt DESC
+    ''',
+      [userId],
+    );
+  }
+
   // ==================== MESSAGE OPERATIONS ====================
 
   Future<int> createMessage(Map<String, dynamic> message) async {
@@ -280,24 +431,25 @@ class DatabaseHelper {
         users.username,
         users.displayName,
         users.profileImage,
-        messages.content as lastMessage,
-        messages.createdAt as lastMessageTime,
-        (SELECT COUNT(*) FROM messages m 
-         WHERE m.receiverId = ? 
-         AND m.senderId = users.id 
-         AND m.isRead = 0) as unreadCount
-      FROM messages
-      INNER JOIN users ON (
-        CASE 
-          WHEN messages.senderId = ? THEN messages.receiverId = users.id
-          ELSE messages.senderId = users.id
-        END
+        m.content as lastMessage,
+        m.createdAt as lastMessageTime,
+        (SELECT COUNT(*) FROM messages 
+         WHERE receiverId = ? 
+         AND senderId = users.id 
+         AND isRead = 0) as unreadCount
+      FROM users
+      JOIN messages m ON (
+        (m.senderId = users.id AND m.receiverId = ?) OR
+        (m.senderId = ? AND m.receiverId = users.id)
       )
-      WHERE messages.senderId = ? OR messages.receiverId = ?
-      GROUP BY users.id
-      ORDER BY messages.createdAt DESC
+      WHERE m.id = (
+        SELECT MAX(id) FROM messages 
+        WHERE (senderId = users.id AND receiverId = ?) 
+           OR (senderId = ? AND receiverId = users.id)
+      )
+      ORDER BY m.createdAt DESC
     ''',
-      [userId, userId, userId, userId],
+      [userId, userId, userId, userId, userId],
     );
   }
 

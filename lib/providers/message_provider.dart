@@ -17,23 +17,20 @@ class MessageProvider with ChangeNotifier {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getMessages(
-    int userId1,
-    int userId2,
-  ) async {
+  Future<void> loadMessages(int userId1, int userId2) async {
     try {
       final key = _getConversationKey(userId1, userId2);
-
-      if (_messages[key] == null) {
-        final db = DatabaseHelper.instance;
-        _messages[key] = await db.getMessagesBetweenUsers(userId1, userId2);
-      }
-
-      return _messages[key]!;
+      final db = DatabaseHelper.instance;
+      _messages[key] = await db.getMessagesBetweenUsers(userId1, userId2);
+      notifyListeners();
     } catch (e) {
       print('Error getting messages: $e');
-      return [];
     }
+  }
+
+  List<Map<String, dynamic>> getMessages(int userId1, int userId2) {
+    final key = _getConversationKey(userId1, userId2);
+    return _messages[key] ?? [];
   }
 
   Future<void> sendMessage(int senderId, int receiverId, String content) async {

@@ -6,6 +6,8 @@ import '../providers/theme_provider.dart';
 import '../widgets/tweet_card.dart';
 import '../widgets/custom_button.dart';
 import 'edit_profile_screen.dart';
+import '../models/comment_model.dart';
+import '../models/tweet_model.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -22,6 +24,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = context.watch<AuthProvider>().currentUser;
     final tweets = context.watch<TweetProvider>().tweets;
     final userTweets = tweets.where((t) => t.author.id == user?.id).toList();
+
+    if (user != null && _selectedTab == 1) {
+      context.read<TweetProvider>().loadUserReplies(int.parse(user.id));
+      context.read<TweetProvider>().loadRetweetedTweets(int.parse(user.id));
+    }
 
     return Scaffold(
       body: CustomScrollView(
@@ -49,9 +56,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
 
-          /// ============================
-          /// HEADER PROFILE (Avatar + button)
-          /// ============================
           SliverToBoxAdapter(
             child: Container(
               color: Theme.of(context).scaffoldBackgroundColor,
@@ -59,12 +63,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 16), // jarak dari banner
-
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Avatar
                       Container(
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
@@ -84,8 +86,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               : null,
                         ),
                       ),
-
-                      // Edit profile button
                       SizedBox(
                         width: 120,
                         child: CustomButton(
@@ -103,12 +103,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 12),
-
-                  /// ============================
-                  /// USER INFO
-                  /// ============================
                   Row(
                     children: [
                       Text(
@@ -129,17 +124,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 4),
-
                   Text(
                     '@${user?.username ?? ''}',
                     style: TextStyle(color: Colors.grey[600], fontSize: 15),
                   ),
-
                   if (user?.bio.isNotEmpty ?? false) ...[
                     const SizedBox(height: 12),
                     Text(user!.bio),
                   ],
-
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -155,9 +147,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 12),
-
                   Row(
                     children: [
                       Text(
@@ -169,9 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         'Mengikuti',
                         style: TextStyle(color: Colors.grey[600]),
                       ),
-
                       const SizedBox(width: 20),
-
                       Text(
                         '${user?.followers ?? 0}',
                         style: const TextStyle(fontWeight: FontWeight.bold),
@@ -183,16 +171,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 16),
                 ],
               ),
             ),
           ),
 
-          /// ============================
-          /// TABS
-          /// ============================
           SliverToBoxAdapter(
             child: Container(
               decoration: BoxDecoration(
@@ -215,23 +199,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
 
-          /// ============================
-          /// LIST TWEET USER
-          /// ============================
           SliverList(
-            delegate: SliverChildBuilderDelegate((context, index) {
-              if (_selectedTab == 0) {
-                return TweetCard(tweet: userTweets[index]);
-              }
-              return const SizedBox();
-            }, childCount: _selectedTab == 0 ? userTweets.length : 0),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (_selectedTab == 0) {
+                  return TweetCard(tweet: userTweets[index]);
+                } else if (_selectedTab == 1) {
+                  final provider = context.watch<TweetProvider>();
+                  final replies = provider.userReplies;
+                  final retweets = provider.userRetweets;
+
+                  final combined = [
+                    ...replies.map(
+                      (r) => {'type': 'reply', 'data': r, 'date': r.createdAt},
+                    ),
+                    ...retweets.map(
+                      (r) => {
+                        'type': 'retweet',
+                        'data': r,
+                        'date': r.createdAt,
+                      },
+                    ),
+                  ];
+                  combined.sort(
+                    (a, b) => (b['date'] as DateTime).compareTo(
+                      a['date'] as DateTime,
+                    ),
+                  );
+
+                  if (index < combined.length) {
+                    final item = combined[index];
+                    if (item['type'] == 'reply') {
+                      final reply = item['data'] as CommentModel;
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: NetworkImage(
+                            reply.author.profileImage,
+                          ),
+                        ),
+                        title: Text(
+                          reply.author.displayName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('@${reply.author.username}'),
+                            const SizedBox(height: 4),
+                            Text(reply.content),
+                          ],
+                        ),
+                        trailing: Text(
+                          '${reply.createdAt.day}/${reply.createdAt.month}',
+                          style: const TextStyle(color: Colors.grey),
+                        ),
+                      );
+                    } else {
+                      final tweet = item['data'] as TweetModel;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 48, top: 8),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.repeat,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${user?.displayName} me-retweet',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TweetCard(tweet: tweet),
+                        ],
+                      );
+                    }
+                  }
+                } else if (_selectedTab == 2) {
+                  final mediaTweets = userTweets
+                      .where((t) => t.images.isNotEmpty)
+                      .toList();
+                  if (index < mediaTweets.length) {
+                    return TweetCard(tweet: mediaTweets[index]);
+                  }
+                } else if (_selectedTab == 3) {
+                  final likedTweets = context
+                      .watch<TweetProvider>()
+                      .likedTweets;
+                  if (index < likedTweets.length) {
+                    return TweetCard(tweet: likedTweets[index]);
+                  }
+                }
+                return const SizedBox();
+              },
+              childCount: _selectedTab == 0
+                  ? userTweets.length
+                  : (_selectedTab == 1
+                        ? (context.watch<TweetProvider>().userReplies.length +
+                              context
+                                  .watch<TweetProvider>()
+                                  .userRetweets
+                                  .length)
+                        : (_selectedTab == 2
+                              ? userTweets
+                                    .where((t) => t.images.isNotEmpty)
+                                    .length
+                              : (_selectedTab == 3
+                                    ? context
+                                          .watch<TweetProvider>()
+                                          .likedTweets
+                                          .length
+                                    : 0))),
+            ),
           ),
         ],
       ),
     );
   }
 
-  /// BUILD TAB ITEM
   Widget _buildTab(String text, int index) {
     final isSelected = _selectedTab == index;
     return Expanded(
@@ -262,7 +356,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// FORMAT JOIN DATE
   String _formatDate(DateTime date) {
     const months = [
       'Januari',
@@ -281,7 +374,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return '${months[date.month - 1]} ${date.year}';
   }
 
-  /// SHOW MENU
   void _showProfileMenu(BuildContext context) {
     showModalBottomSheet(
       context: context,

@@ -1,109 +1,154 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/message_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/user_avatar.dart';
 import 'message_detail_screen.dart';
+import 'settings_screen.dart';
+import 'user_selection_screen.dart';
 
 class MessagesScreen extends StatelessWidget {
   const MessagesScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final messages = [
-      {
-        'name': 'John Doe',
-        'username': 'johndoe',
-        'image': 'https://i.pravatar.cc/150?img=12',
-        'message': 'Hai! Apa kabar?',
-        'time': '2j',
-        'unread': true,
-      },
-      {
-        'name': 'Jane Smith',
-        'username': 'janesmith',
-        'image': 'https://i.pravatar.cc/150?img=45',
-        'message': 'Terima kasih untuk infonya!',
-        'time': '5j',
-        'unread': false,
-      },
-      {
-        'name': 'Tech Guru',
-        'username': 'techguru',
-        'image': 'https://i.pravatar.cc/150?img=33',
-        'message': 'Apakah kamu sudah coba Flutter 3.0?',
-        'time': '1h',
-        'unread': false,
-      },
-    ];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pesan'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsScreen()),
+              );
+            },
           ),
         ],
       ),
-      body: ListView.builder(
-        itemCount: messages.length,
-        itemBuilder: (context, index) {
-          final message = messages[index];
-          return ListTile(
-            leading: UserAvatar(imageUrl: message['image'] as String, size: 48),
-            title: Row(
-              children: [
-                Text(
-                  message['name'] as String,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  '@${message['username']} · ${message['time']}',
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                ),
-              ],
-            ),
-            subtitle: Text(
-              message['message'] as String,
-              style: TextStyle(
-                color: (message['unread'] as bool) ? null : Colors.grey[600],
-                fontWeight: (message['unread'] as bool)
-                    ? FontWeight.w500
-                    : FontWeight.normal,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: (message['unread'] as bool)
-                ? Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1DA1F2),
-                      shape: BoxShape.circle,
-                    ),
-                  )
-                : null,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => MessageDetailScreen(
-                    userName: message['name'] as String,
-                    username: message['username'] as String,
-                    userImage: message['image'] as String,
+      body: Consumer<MessageProvider>(
+        builder: (context, messageProvider, _) {
+          final conversations = messageProvider.conversations;
+
+          if (conversations.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.mail_outline, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Belum ada pesan',
+                    style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                   ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: conversations.length,
+            itemBuilder: (context, index) {
+              final conversation = conversations[index];
+              final isUnread = (conversation['unreadCount'] as int) > 0;
+
+              return ListTile(
+                leading: UserAvatar(
+                  imageUrl: conversation['profileImage'] as String? ?? '',
+                  size: 48,
                 ),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        conversation['displayName'] as String,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatTime(conversation['lastMessageTime'] as String),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                  ],
+                ),
+                subtitle: Text(
+                  conversation['lastMessage'] as String,
+                  style: TextStyle(
+                    color: isUnread ? null : Colors.grey[600],
+                    fontWeight: isUnread ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: isUnread
+                    ? Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1DA1F2),
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => MessageDetailScreen(
+                        receiverId: conversation['id'] as int,
+                        userName: conversation['displayName'] as String,
+                        username: conversation['username'] as String,
+                        userImage:
+                            conversation['profileImage'] as String? ?? '',
+                      ),
+                    ),
+                  );
+                },
               );
             },
           );
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () async {
+          final user = context.read<AuthProvider>().currentUser;
+          if (user == null) return;
+
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const UserSelectionScreen(),
+            ),
+          );
+          // Refresh messages when returning
+          if (context.mounted) {
+            context.read<MessageProvider>().loadConversations(
+              int.parse(user.id),
+            );
+          }
+        },
         backgroundColor: const Color(0xFF1DA1F2),
         child: const Icon(Icons.mail_outline, color: Colors.white),
       ),
     );
+  }
+
+  String _formatTime(String isoString) {
+    final date = DateTime.parse(isoString);
+    final now = DateTime.now();
+    final diff = now.difference(date);
+
+    if (diff.inDays > 0) {
+      return '${diff.inDays}hr';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours}j';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes}m';
+    } else {
+      return 'Baru saja';
+    }
   }
 }
