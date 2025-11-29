@@ -42,14 +42,11 @@ class SettingsScreen extends StatelessWidget {
                     ),
                     TextButton(
                       onPressed: () {
+                        Navigator.pop(context); // Close dialog
                         context.read<AuthProvider>().logout();
-                        Navigator.pushAndRemoveUntil(
+                        Navigator.of(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => const AuthScreen(),
-                          ),
-                          (route) => false,
-                        );
+                        ).popUntil((route) => route.isFirst);
                       },
                       child: const Text(
                         'Keluar',

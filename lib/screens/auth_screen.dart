@@ -75,11 +75,7 @@ class _AuthScreenState extends State<AuthScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.flutter_dash,
-                size: 80,
-                color: Color(0xFF1DA1F2),
-              ),
+              Image.asset('assets/icon/app_icon.png', height: 100),
               const SizedBox(height: 48),
               Text(
                 isLogin ? 'Masuk ke TwitMe' : 'Daftar TwitMe',

@@ -58,7 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
         title: TextField(
           controller: _searchController,
           decoration: InputDecoration(
-            hintText: 'Cari Twitter',
+            hintText: 'Cari TwitMe',
             prefixIcon: const Icon(Icons.search),
             suffixIcon: searchQuery.isNotEmpty
                 ? IconButton(
