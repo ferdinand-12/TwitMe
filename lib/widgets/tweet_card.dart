@@ -102,7 +102,7 @@ class TweetCard extends StatelessWidget {
 
                   const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _ActionButton(
                         icon: Icons.chat_bubble_outline,
@@ -125,7 +125,24 @@ class TweetCard extends StatelessWidget {
                             ? Colors.green
                             : Colors.grey[600]!,
                         onTap: () {
-                          context.read<TweetProvider>().toggleRetweet(tweet.id);
+                          if (currentUser != null) {
+                            try {
+                              context.read<TweetProvider>().toggleRetweet(
+                                tweet.id,
+                                int.parse(currentUser.id),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Gagal me-retweet: $e')),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Silakan login terlebih dahulu'),
+                              ),
+                            );
+                          }
                         },
                       ),
                       _ActionButton(
@@ -136,35 +153,24 @@ class TweetCard extends StatelessWidget {
                         color: tweet.isLiked ? Colors.red : Colors.grey[600]!,
                         onTap: () {
                           if (currentUser != null) {
-                            final userId = int.parse(currentUser.id);
-                            context.read<TweetProvider>().toggleLike(
-                              tweet.id,
-                              userId,
+                            try {
+                              final userId = int.parse(currentUser.id);
+                              context.read<TweetProvider>().toggleLike(
+                                tweet.id,
+                                userId,
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Gagal menyukai: $e')),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Silakan login terlebih dahulu'),
+                              ),
                             );
                           }
-                        },
-                      ),
-                      _ActionButton(
-                        icon: Icons.bar_chart,
-                        count: 0,
-                        color: Colors.grey[600]!,
-                        onTap: () {},
-                        showCount: false,
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          tweet.isBookmarked
-                              ? Icons.bookmark
-                              : Icons.bookmark_border,
-                          size: 20,
-                        ),
-                        color: tweet.isBookmarked
-                            ? Colors.blue
-                            : Colors.grey[600],
-                        onPressed: () {
-                          context.read<TweetProvider>().toggleBookmark(
-                            tweet.id,
-                          );
                         },
                       ),
                     ],

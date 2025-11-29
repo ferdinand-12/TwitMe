@@ -31,7 +31,16 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
       int.parse(currentUser.id),
     );
     setState(() {
-      _users = usersData.map((data) => UserModel.fromJson(data)).toList();
+      _users = usersData.map((data) {
+        return UserModel(
+          id: data['id'].toString(),
+          username: data['username'],
+          displayName: data['displayName'],
+          profileImage: data['profileImage'] ?? '',
+          isVerified: data['isVerified'] == 1,
+          joinDate: DateTime.parse(data['joinDate']),
+        );
+      }).toList();
       _isLoading = false;
     });
   }

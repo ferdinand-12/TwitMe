@@ -58,6 +58,7 @@ class TweetProvider with ChangeNotifier {
       final repliesData = await db.getRepliesByUserId(userId);
 
       _userReplies = repliesData.map((data) {
+        // print('Loaded reply from ${data['username']}, image: ${data['profileImage']}');
         return CommentModel(
           id: data['id'].toString(),
           tweetId: data['tweetId'].toString(),
@@ -119,6 +120,8 @@ class TweetProvider with ChangeNotifier {
           likes: tweet.likes,
           retweets: tweet.retweets,
           replies: tweet.replies + 1,
+          isLiked: tweet.isLiked,
+          isRetweeted: tweet.isRetweeted,
         );
       }
 
@@ -128,16 +131,38 @@ class TweetProvider with ChangeNotifier {
     }
   }
 
-  // ... (existing methods: loadTweets, _generateDummyTweets, loadLikedTweets, addTweet, toggleLike, toggleRetweet, deleteTweet, isLiked, toggleBookmark)
-
   Future<void> loadTweets() async {
     try {
       final db = DatabaseHelper.instance;
 
-      // Check if we need to seed initial data
-      final hasTweets = await db.hasTweets();
-      if (!hasTweets) {
+      // Check if we need to seed initial data by checking if dummy user exists
+      final dummyUserExists = await db.getUserById(999);
+      if (dummyUserExists == null) {
         final dummyTweets = _generateDummyTweets();
+
+        // Create dummy users first
+        for (var tweet in dummyTweets) {
+          final userId = int.parse(tweet.author.id);
+          final userExists = await db.getUserById(userId);
+          if (userExists == null) {
+            await db.createUser({
+              'id': userId,
+              'username': tweet.author.username,
+              'displayName': tweet.author.displayName,
+              'profileImage': tweet.author.profileImage,
+              'isVerified': tweet.author.isVerified ? 1 : 0,
+              'joinDate': tweet.author.joinDate.toIso8601String(),
+              'email': '${tweet.author.username}@example.com',
+              'password': 'password',
+              'bio': null,
+              'coverImage': null,
+              'followers': 0,
+              'following': 0,
+            });
+          }
+        }
+
+        // Then insert tweets
         final tweetsToInsert = dummyTweets.map((t) {
           return {
             'userId': int.parse(t.author.id),
@@ -150,31 +175,15 @@ class TweetProvider with ChangeNotifier {
           };
         }).toList();
 
-        // We also need to ensure the dummy users exist
-        for (var tweet in dummyTweets) {
-          final userExists = await db.getUserById(int.parse(tweet.author.id));
-          if (userExists == null) {
-            await db.createUser({
-              'id': int.parse(tweet.author.id),
-              'username': tweet.author.username,
-              'displayName': tweet.author.displayName,
-              'profileImage': tweet.author.profileImage,
-              'isVerified': tweet.author.isVerified ? 1 : 0,
-              'joinDate': tweet.author.joinDate.toIso8601String(),
-              'email': '${tweet.author.username}@example.com', // Dummy email
-              'password': 'password', // Dummy password
-            });
-          }
-        }
-
         await db.batchInsertTweets(tweetsToInsert);
       }
 
       final tweetsData = await db.getAllTweets();
 
       _tweets = tweetsData.map((data) {
+        final tweetId = data['id'].toString();
         return TweetModel(
-          id: data['id'].toString(),
+          id: tweetId,
           author: UserModel(
             id: data['userId'].toString(),
             username: data['username'],
@@ -191,6 +200,8 @@ class TweetProvider with ChangeNotifier {
           likes: data['likes'],
           retweets: data['retweets'],
           replies: data['replies'],
+          isLiked: _likedTweetIds.contains(tweetId),
+          isRetweeted: _retweetedTweetIds.contains(tweetId),
         );
       }).toList();
 
@@ -215,9 +226,9 @@ class TweetProvider with ChangeNotifier {
         content: 'Just bought another company. Might delete later.',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-        likes: 15400,
-        retweets: 5400,
-        replies: 1200,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_2',
@@ -232,9 +243,9 @@ class TweetProvider with ChangeNotifier {
         content: 'Coding is the new literacy. Everyone should learn to code.',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-        likes: 8900,
-        retweets: 2100,
-        replies: 450,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_3',
@@ -246,13 +257,12 @@ class TweetProvider with ChangeNotifier {
           isVerified: true,
           joinDate: DateTime.now(),
         ),
-        content:
-            'Flutter 3.19 is out now! Check out the new features. 💙 #FlutterDev #Dart',
+        content: 'Flutter 3.19 is out now! Check out the new features. 💙',
         images: ['https://picsum.photos/seed/flutter/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-        likes: 5600,
-        retweets: 1200,
-        replies: 300,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_4',
@@ -267,9 +277,9 @@ class TweetProvider with ChangeNotifier {
         content: 'The view from up here is amazing! 🌍🚀',
         images: ['https://picsum.photos/seed/space/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 5)),
-        likes: 25000,
-        retweets: 8000,
-        replies: 1500,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_5',
@@ -282,12 +292,12 @@ class TweetProvider with ChangeNotifier {
           joinDate: DateTime.now(),
         ),
         content:
-            'Building amazing apps with #FlutterDev has never been easier! Join our community today.',
+            'Building amazing apps with Flutter has never been easier! Join our community today.',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 6)),
-        likes: 3200,
-        retweets: 890,
-        replies: 156,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_6',
@@ -303,9 +313,9 @@ class TweetProvider with ChangeNotifier {
             'Pemilu 2024 akan diselenggarakan dengan transparan dan akuntabel. Mari gunakan hak pilih Anda!',
         images: ['https://picsum.photos/seed/pemilu/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 8)),
-        likes: 12000,
-        retweets: 4500,
-        replies: 2300,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_7',
@@ -321,9 +331,9 @@ class TweetProvider with ChangeNotifier {
             'GOAL! What an incredible finish in the Liga Champion tonight! ⚽🏆',
         images: ['https://picsum.photos/seed/ucl/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        likes: 45000,
-        retweets: 12000,
-        replies: 3400,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_8',
@@ -339,9 +349,9 @@ class TweetProvider with ChangeNotifier {
             'Perfect weekend plans: grab some popcorn and enjoy #MovieNight with our latest releases! 🍿🎬',
         images: ['https://picsum.photos/seed/netflix/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 12)),
-        likes: 8700,
-        retweets: 2100,
-        replies: 890,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_9',
@@ -357,9 +367,9 @@ class TweetProvider with ChangeNotifier {
             'Cross-platform development with #FlutterDev means one codebase for Android and iOS! 🚀',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 15)),
-        likes: 4300,
-        retweets: 1100,
-        replies: 234,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_10',
@@ -375,9 +385,9 @@ class TweetProvider with ChangeNotifier {
             'Debat capres Pemilu 2024 akan segera dimulai. Siapa yang akan memenangkan hati rakyat?',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 18)),
-        likes: 5600,
-        retweets: 1800,
-        replies: 1200,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_11',
@@ -392,9 +402,9 @@ class TweetProvider with ChangeNotifier {
         content: 'Hala Madrid! Another victory in Liga Champion! 🏆⚪',
         images: ['https://picsum.photos/seed/madrid/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 4)),
-        likes: 67000,
-        retweets: 18000,
-        replies: 4500,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_12',
@@ -410,9 +420,9 @@ class TweetProvider with ChangeNotifier {
             'Top 10 movies for your #MovieNight this weekend. Which one will you watch first?',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 20)),
-        likes: 12000,
-        retweets: 3400,
-        replies: 890,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_13',
@@ -428,9 +438,9 @@ class TweetProvider with ChangeNotifier {
             'Dart 3.0 brings sound null safety to #FlutterDev. Write safer code today!',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 24)),
-        likes: 3800,
-        retweets: 920,
-        replies: 178,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_14',
@@ -446,9 +456,9 @@ class TweetProvider with ChangeNotifier {
             'BREAKING: Hasil quick count Pemilu 2024 mulai masuk. Pantau terus update terbaru!',
         images: ['https://picsum.photos/seed/kompas/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 10)),
-        likes: 23000,
-        retweets: 8900,
-        replies: 5600,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_15',
@@ -463,9 +473,9 @@ class TweetProvider with ChangeNotifier {
         content: 'Visca Barça! Ready for the Liga Champion match tonight! 💙❤️',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 7)),
-        likes: 54000,
-        retweets: 14000,
-        replies: 3200,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_16',
@@ -481,9 +491,9 @@ class TweetProvider with ChangeNotifier {
             'New Marvel series dropping this Friday! Perfect for #MovieNight 🦸‍♂️✨',
         images: ['https://picsum.photos/seed/disney/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 14)),
-        likes: 34000,
-        retweets: 9800,
-        replies: 2100,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_17',
@@ -499,9 +509,9 @@ class TweetProvider with ChangeNotifier {
             'Just published a new #FlutterDev tutorial on state management. Check it out!',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 22)),
-        likes: 1200,
-        retweets: 340,
-        replies: 89,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_18',
@@ -517,9 +527,9 @@ class TweetProvider with ChangeNotifier {
             'Suasana TPS di berbagai daerah untuk Pemilu 2024. Antusiasme pemilih sangat tinggi!',
         images: ['https://picsum.photos/seed/metro/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 16)),
-        likes: 8900,
-        retweets: 2300,
-        replies: 1100,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_19',
@@ -534,9 +544,9 @@ class TweetProvider with ChangeNotifier {
         content: 'Liga Champion highlights: Top 5 goals from this week! ⚽🔥',
         images: ['https://picsum.photos/seed/espn/400/200'],
         createdAt: DateTime.now().subtract(const Duration(hours: 9)),
-        likes: 28000,
-        retweets: 7600,
-        replies: 1800,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
       TweetModel(
         id: 'dummy_20',
@@ -551,9 +561,187 @@ class TweetProvider with ChangeNotifier {
         content: 'Binge-worthy series for your #MovieNight marathon! 📺🍿',
         images: [],
         createdAt: DateTime.now().subtract(const Duration(hours: 11)),
-        likes: 15000,
-        retweets: 4200,
-        replies: 980,
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_21',
+        author: UserModel(
+          id: '979',
+          username: 'techcrunch',
+          displayName: 'TechCrunch',
+          profileImage: 'https://i.pravatar.cc/150?img=31',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'Breaking: New AI breakthrough announced today! The future is here. 🤖',
+        images: ['https://picsum.photos/seed/tech/400/200'],
+        createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_22',
+        author: UserModel(
+          id: '978',
+          username: 'spotify',
+          displayName: 'Spotify',
+          profileImage: 'https://i.pravatar.cc/150?img=32',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'Your 2024 Wrapped is ready! Check out your top songs of the year 🎵',
+        images: [],
+        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_23',
+        author: UserModel(
+          id: '977',
+          username: 'premierleague',
+          displayName: 'Premier League',
+          profileImage: 'https://i.pravatar.cc/150?img=33',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content: 'What a match! The title race is heating up! ⚽🔥',
+        images: ['https://picsum.photos/seed/epl/400/200'],
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_24',
+        author: UserModel(
+          id: '976',
+          username: 'apple',
+          displayName: 'Apple',
+          profileImage: 'https://i.pravatar.cc/150?img=34',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'Introducing the new iPhone 16 Pro. The most powerful iPhone ever. 📱✨',
+        images: ['https://picsum.photos/seed/apple/400/200'],
+        createdAt: DateTime.now().subtract(const Duration(hours: 6)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_25',
+        author: UserModel(
+          id: '975',
+          username: 'bbcnews',
+          displayName: 'BBC News',
+          profileImage: 'https://i.pravatar.cc/150?img=35',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'BREAKING: Major climate agreement reached at global summit 🌍',
+        images: [],
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_26',
+        author: UserModel(
+          id: '974',
+          username: 'instagram',
+          displayName: 'Instagram',
+          profileImage: 'https://i.pravatar.cc/150?img=36',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'New feature alert! Now you can share your favorite moments with friends 📸',
+        images: ['https://picsum.photos/seed/insta/400/200'],
+        createdAt: DateTime.now().subtract(const Duration(hours: 8)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_27',
+        author: UserModel(
+          id: '973',
+          username: 'therock',
+          displayName: 'Dwayne Johnson',
+          profileImage: 'https://i.pravatar.cc/150?img=37',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'Just finished an amazing workout! Remember, success starts with discipline 💪',
+        images: [],
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_28',
+        author: UserModel(
+          id: '972',
+          username: 'cnnbreaking',
+          displayName: 'CNN Breaking News',
+          profileImage: 'https://i.pravatar.cc/150?img=38',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'Live updates: Major developments in international relations today',
+        images: ['https://picsum.photos/seed/cnn/400/200'],
+        createdAt: DateTime.now().subtract(const Duration(minutes: 45)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_29',
+        author: UserModel(
+          id: '971',
+          username: 'youtube',
+          displayName: 'YouTube',
+          profileImage: 'https://i.pravatar.cc/150?img=39',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content:
+            'Creators are making amazing content every day. What will you create? 🎬',
+        images: [],
+        createdAt: DateTime.now().subtract(const Duration(hours: 5)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
+      ),
+      TweetModel(
+        id: 'dummy_30',
+        author: UserModel(
+          id: '970',
+          username: 'spacex',
+          displayName: 'SpaceX',
+          profileImage: 'https://i.pravatar.cc/150?img=40',
+          isVerified: true,
+          joinDate: DateTime.now(),
+        ),
+        content: 'Successful launch! Next stop: Mars 🚀🔴',
+        images: ['https://picsum.photos/seed/spacex/400/200'],
+        createdAt: DateTime.now().subtract(const Duration(hours: 7)),
+        likes: 0,
+        retweets: 0,
+        replies: 0,
       ),
     ];
   }
@@ -565,6 +753,13 @@ class TweetProvider with ChangeNotifier {
       final likedData = await db.getLikedTweetsByUserId(userId);
 
       _likedTweetIds = likedData.map((data) => data['id'].toString()).toList();
+
+      // Also load retweeted tweets
+      await loadRetweetedTweets(userId);
+
+      // Reload tweets to update their isLiked and isRetweeted states
+      await loadTweets();
+
       notifyListeners();
     } catch (e) {
       print('Error loading liked tweets: $e');
@@ -611,7 +806,13 @@ class TweetProvider with ChangeNotifier {
   Future<void> toggleLike(String tweetId, int userId) async {
     try {
       final db = DatabaseHelper.instance;
-      final tweetIdInt = int.parse(tweetId);
+      int tweetIdInt;
+      try {
+        tweetIdInt = int.parse(tweetId);
+      } catch (e) {
+        print('Invalid tweet ID for like: $tweetId');
+        return;
+      }
       final isLiked = await db.isTweetLiked(userId, tweetIdInt);
 
       final tweetIndex = _tweets.indexWhere((t) => t.id == tweetId);
@@ -619,20 +820,23 @@ class TweetProvider with ChangeNotifier {
 
       final tweet = _tweets[tweetIndex];
       int newLikes;
+      bool newIsLiked;
 
       if (isLiked) {
         await db.unlikeTweet(userId, tweetIdInt);
         newLikes = tweet.likes - 1;
+        newIsLiked = false;
         _likedTweetIds.remove(tweetId);
       } else {
         await db.likeTweet(userId, tweetIdInt);
         newLikes = tweet.likes + 1;
+        newIsLiked = true;
         _likedTweetIds.add(tweetId);
       }
 
       await db.updateTweetLikes(tweetIdInt, newLikes);
 
-      _tweets[tweetIndex] = TweetModel(
+      final newTweet = TweetModel(
         id: tweet.id,
         author: tweet.author,
         content: tweet.content,
@@ -641,7 +845,17 @@ class TweetProvider with ChangeNotifier {
         likes: newLikes,
         retweets: tweet.retweets,
         replies: tweet.replies,
+        isLiked: newIsLiked,
+        isRetweeted: tweet.isRetweeted,
       );
+
+      _tweets[tweetIndex] = newTweet;
+
+      // Also update in userRetweets if it exists there
+      final retweetIndex = _userRetweets.indexWhere((t) => t.id == tweetId);
+      if (retweetIndex != -1) {
+        _userRetweets[retweetIndex] = newTweet;
+      }
 
       notifyListeners();
     } catch (e) {
@@ -649,13 +863,16 @@ class TweetProvider with ChangeNotifier {
     }
   }
 
-  Future<void> toggleRetweet(String tweetId) async {
+  Future<void> toggleRetweet(String tweetId, int userId) async {
     try {
       final db = DatabaseHelper.instance;
-      final tweetIdInt = int.parse(tweetId);
-      final userId = _currentUserId;
-
-      if (userId == null) return;
+      int tweetIdInt;
+      try {
+        tweetIdInt = int.parse(tweetId);
+      } catch (e) {
+        print('Invalid tweet ID for retweet: $tweetId');
+        return;
+      }
 
       final isRetweeted = await db.isTweetRetweeted(userId, tweetIdInt);
       final tweetIndex = _tweets.indexWhere((t) => t.id == tweetId);
@@ -663,20 +880,17 @@ class TweetProvider with ChangeNotifier {
 
       final tweet = _tweets[tweetIndex];
       int newRetweets;
+      bool newIsRetweeted;
 
       if (isRetweeted) {
-        await db.unretweetTweet(userId, tweetIdInt);
         newRetweets = tweet.retweets - 1;
-        _retweetedTweetIds.remove(tweetId);
+        newIsRetweeted = false;
       } else {
-        await db.retweetTweet(userId, tweetIdInt);
         newRetweets = tweet.retweets + 1;
-        _retweetedTweetIds.add(tweetId);
+        newIsRetweeted = true;
       }
 
-      await db.updateTweetRetweets(tweetIdInt, newRetweets);
-
-      _tweets[tweetIndex] = TweetModel(
+      final newTweet = TweetModel(
         id: tweet.id,
         author: tweet.author,
         content: tweet.content,
@@ -685,7 +899,23 @@ class TweetProvider with ChangeNotifier {
         likes: tweet.likes,
         retweets: newRetweets,
         replies: tweet.replies,
+        isLiked: tweet.isLiked,
+        isRetweeted: newIsRetweeted,
       );
+
+      _tweets[tweetIndex] = newTweet;
+
+      if (isRetweeted) {
+        await db.unretweetTweet(userId, tweetIdInt);
+        _retweetedTweetIds.remove(tweetId);
+        _userRetweets.removeWhere((t) => t.id == tweetId);
+      } else {
+        await db.retweetTweet(userId, tweetIdInt);
+        _retweetedTweetIds.add(tweetId);
+        _userRetweets.add(newTweet);
+      }
+
+      await db.updateTweetRetweets(tweetIdInt, newRetweets);
 
       notifyListeners();
     } catch (e) {

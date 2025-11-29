@@ -105,6 +105,7 @@ class _ComposeTweetScreenState extends State<ComposeTweetScreen> {
               onPressed: _postTweet,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1DA1F2),
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -123,9 +124,13 @@ class _ComposeTweetScreenState extends State<ComposeTweetScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   CircleAvatar(
-                    backgroundImage: NetworkImage(
-                      user?.profileImage ?? 'https://i.pravatar.cc/150?img=1',
-                    ),
+                    backgroundImage:
+                        user?.profileImage != null &&
+                            user!.profileImage.isNotEmpty
+                        ? (user.profileImage.startsWith('http')
+                              ? NetworkImage(user.profileImage) as ImageProvider
+                              : FileImage(File(user.profileImage)))
+                        : const NetworkImage('https://i.pravatar.cc/150?img=1'),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

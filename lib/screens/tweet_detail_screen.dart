@@ -170,62 +170,38 @@ class _TweetDetailScreenState extends State<TweetDetailScreen> {
                   const Divider(),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          onPressed: () {},
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            widget.tweet.isRetweeted
-                                ? Icons.repeat
-                                : Icons.repeat,
-                            color: widget.tweet.isRetweeted
-                                ? Colors.green
-                                : null,
-                          ),
-                          onPressed: () {
-                            context.read<TweetProvider>().toggleRetweet(
-                              widget.tweet.id,
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            widget.tweet.isLiked
-                                ? Icons.favorite
-                                : Icons.favorite_border,
-                            color: widget.tweet.isLiked ? Colors.red : null,
-                          ),
-                          onPressed: () {
-                            context.read<TweetProvider>().toggleLike(
-                              widget.tweet.id,
-                              widget.tweet.isLiked ? 0 : 1,
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            widget.tweet.isBookmarked
-                                ? Icons.bookmark
-                                : Icons.bookmark_border,
-                            color: widget.tweet.isBookmarked
-                                ? Colors.blue
-                                : null,
-                          ),
-                          onPressed: () {
-                            context.read<TweetProvider>().toggleBookmark(
-                              widget.tweet.id,
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.share_outlined),
-                          onPressed: () {},
-                        ),
-                      ],
+                    child: Consumer<AuthProvider>(
+                      builder: (context, authProvider, _) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.chat_bubble_outline),
+                              onPressed: () {
+                                // Focus on comment input
+                                FocusScope.of(context).requestFocus();
+                              },
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                Icons.repeat,
+                                color: widget.tweet.isRetweeted
+                                    ? Colors.green
+                                    : null,
+                              ),
+                              onPressed: () {
+                                final currentUser = authProvider.currentUser;
+                                if (currentUser != null) {
+                                  context.read<TweetProvider>().toggleRetweet(
+                                    widget.tweet.id,
+                                    int.parse(currentUser.id),
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   const Divider(),

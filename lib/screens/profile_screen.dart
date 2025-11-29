@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -25,9 +26,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final tweets = context.watch<TweetProvider>().tweets;
     final userTweets = tweets.where((t) => t.author.id == user?.id).toList();
 
-    if (user != null && _selectedTab == 1) {
-      context.read<TweetProvider>().loadUserReplies(int.parse(user.id));
-      context.read<TweetProvider>().loadRetweetedTweets(int.parse(user.id));
+    if (user != null) {
+      if (_selectedTab == 1) {
+        context.read<TweetProvider>().loadUserReplies(int.parse(user.id));
+      }
+      if (_selectedTab == 0 || _selectedTab == 1) {
+        context.read<TweetProvider>().loadRetweetedTweets(int.parse(user.id));
+      }
     }
 
     return Scaffold(
@@ -42,7 +47,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 fit: StackFit.expand,
                 children: [
                   if (user?.coverImage.isNotEmpty ?? false)
-                    Image.network(user!.coverImage, fit: BoxFit.cover)
+                    (user!.coverImage.startsWith('http')
+                        ? Image.network(user.coverImage, fit: BoxFit.cover)
+                        : Image.file(File(user.coverImage), fit: BoxFit.cover))
                   else
                     Container(color: Colors.grey[300]),
                 ],
@@ -79,7 +86,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           radius: 40,
                           backgroundImage:
                               user?.profileImage.isNotEmpty ?? false
-                              ? NetworkImage(user!.profileImage)
+                              ? (user!.profileImage.startsWith('http')
+                                    ? NetworkImage(user.profileImage)
+                                          as ImageProvider
+                                    : FileImage(File(user.profileImage)))
                               : null,
                           child: user?.profileImage.isEmpty ?? true
                               ? const Icon(Icons.person, size: 40)
@@ -203,7 +213,69 @@ class _ProfileScreenState extends State<ProfileScreen> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 if (_selectedTab == 0) {
-                  return TweetCard(tweet: userTweets[index]);
+                  final provider = context.watch<TweetProvider>();
+                  final retweets = provider.userRetweets;
+
+                  final combined = [
+                    ...userTweets.map(
+                      (t) => {'type': 'tweet', 'data': t, 'date': t.createdAt},
+                    ),
+                    ...retweets.map(
+                      (t) => {
+                        'type': 'retweet',
+                        'data': t,
+                        'date': t.createdAt,
+                      },
+                    ),
+                  ];
+
+                  combined.sort(
+                    (a, b) => (b['date'] as DateTime).compareTo(
+                      a['date'] as DateTime,
+                    ),
+                  );
+
+                  if (index < combined.length) {
+                    final item = combined[index];
+                    final tweet = item['data'] as TweetModel;
+
+                    if (item['type'] == 'retweet') {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              left: 48,
+                              top: 8,
+                              bottom: 4,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.repeat,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${user?.displayName} me-retweet',
+                                  style: const TextStyle(
+                                    color: Colors.grey,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TweetCard(tweet: tweet),
+                        ],
+                      );
+                    } else {
+                      return TweetCard(tweet: tweet);
+                    }
+                  }
+                  return const SizedBox();
                 } else if (_selectedTab == 1) {
                   final provider = context.watch<TweetProvider>();
                   final replies = provider.userReplies;
@@ -233,9 +305,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       final reply = item['data'] as CommentModel;
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: NetworkImage(
-                            reply.author.profileImage,
-                          ),
+                          backgroundImage: reply.author.profileImage.isEmpty
+                              ? null
+                              : (reply.author.profileImage.startsWith('http')
+                                    ? NetworkImage(reply.author.profileImage)
+                                    : FileImage(File(reply.author.profileImage))
+                                          as ImageProvider),
+                          child: reply.author.profileImage.isEmpty
+                              ? Text(
+                                  reply.author.displayName[0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.white),
+                                )
+                              : null,
                         ),
                         title: Text(
                           reply.author.displayName,
@@ -302,7 +383,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 return const SizedBox();
               },
               childCount: _selectedTab == 0
-                  ? userTweets.length
+                  ? (userTweets.length +
+                        context.watch<TweetProvider>().userRetweets.length)
                   : (_selectedTab == 1
                         ? (context.watch<TweetProvider>().userReplies.length +
                               context

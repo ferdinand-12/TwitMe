@@ -27,7 +27,74 @@ class DatabaseHelper {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, filePath);
 
-    return await openDatabase(path, version: 1, onCreate: _createDB);
+    return await openDatabase(
+      path,
+      version: 3,
+      onCreate: _createDB,
+      onUpgrade: _onUpgrade,
+    );
+  }
+
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add comments table if it doesn't exist
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tweetId INTEGER NOT NULL,
+          userId INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          FOREIGN KEY (tweetId) REFERENCES tweets (id) ON DELETE CASCADE,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE
+        )
+      ''');
+    }
+
+    if (oldVersion < 3) {
+      const idType = 'INTEGER PRIMARY KEY AUTOINCREMENT';
+      const textType = 'TEXT NOT NULL';
+      const intType = 'INTEGER NOT NULL';
+
+      // Create liked_tweets table if not exists
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS liked_tweets (
+          id $idType,
+          userId $intType,
+          tweetId $intType,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+          FOREIGN KEY (tweetId) REFERENCES tweets (id) ON DELETE CASCADE,
+          UNIQUE(userId, tweetId)
+        )
+      ''');
+
+      // Create retweeted_tweets table if not exists
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS retweeted_tweets (
+          id $idType,
+          userId $intType,
+          tweetId $intType,
+          createdAt $textType,
+          FOREIGN KEY (userId) REFERENCES users (id) ON DELETE CASCADE,
+          FOREIGN KEY (tweetId) REFERENCES tweets (id) ON DELETE CASCADE,
+          UNIQUE(userId, tweetId)
+        )
+      ''');
+
+      // Create messages table if not exists
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+          id $idType,
+          senderId $intType,
+          receiverId $intType,
+          content $textType,
+          createdAt $textType,
+          isRead $intType DEFAULT 0,
+          FOREIGN KEY (senderId) REFERENCES users (id) ON DELETE CASCADE,
+          FOREIGN KEY (receiverId) REFERENCES users (id) ON DELETE CASCADE
+        )
+      ''');
+    }
   }
 
   Future _createDB(Database db, int version) async {

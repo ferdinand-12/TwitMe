@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/tweet_provider.dart';
@@ -30,15 +31,15 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     // Load data when screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final authProvider = context.read<AuthProvider>();
       final tweetProvider = context.read<TweetProvider>();
       final messageProvider = context.read<MessageProvider>();
 
       if (authProvider.currentUser != null) {
         final userId = int.parse(authProvider.currentUser!.id);
-        tweetProvider.loadTweets();
-        tweetProvider.loadLikedTweets(userId);
+        // Load liked tweets first (this will load retweets and then all tweets)
+        await tweetProvider.loadLikedTweets(userId);
         messageProvider.loadConversations(userId);
       }
     });
@@ -62,11 +63,16 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   child: Consumer<AuthProvider>(
                     builder: (context, authProvider, _) {
+                      final profileImage =
+                          authProvider.currentUser?.profileImage ?? '';
                       return CircleAvatar(
-                        backgroundImage: NetworkImage(
-                          authProvider.currentUser?.profileImage ??
-                              'https://i.pravatar.cc/150?img=1',
-                        ),
+                        backgroundImage: profileImage.isNotEmpty
+                            ? (profileImage.startsWith('http')
+                                  ? NetworkImage(profileImage) as ImageProvider
+                                  : FileImage(File(profileImage)))
+                            : const NetworkImage(
+                                'https://i.pravatar.cc/150?img=1',
+                              ),
                       );
                     },
                   ),
@@ -158,14 +164,12 @@ class _FeedScreen extends StatefulWidget {
 }
 
 class _FeedScreenState extends State<_FeedScreen> {
-  int _selectedTab = 0;
-
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
         // ================================
-        // TAB: Untuk Anda / Mengikuti
+        // HEADER: Untuk Anda
         // ================================
         Container(
           decoration: BoxDecoration(
@@ -177,65 +181,18 @@ class _FeedScreenState extends State<_FeedScreen> {
               ),
             ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _selectedTab = 0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: _selectedTab == 0
-                              ? const Color(0xFF1DA1F2)
-                              : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      'Untuk Anda',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontWeight: _selectedTab == 0
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: _selectedTab == 0 ? null : Colors.grey[600],
-                      ),
-                    ),
-                  ),
-                ),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: Color(0xFF1DA1F2), width: 3),
               ),
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() => _selectedTab = 1),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: _selectedTab == 1
-                              ? const Color(0xFF1DA1F2)
-                              : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                    child: Text(
-                      'Mengikuti',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontWeight: _selectedTab == 1
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                        color: _selectedTab == 1 ? null : Colors.grey[600],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
+            child: const Text(
+              'Untuk Anda',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ),
 
@@ -247,7 +204,7 @@ class _FeedScreenState extends State<_FeedScreen> {
             builder: (context, tweetProvider, _) {
               return RefreshIndicator(
                 onRefresh: () async {
-                  await Future.delayed(const Duration(seconds: 1));
+                  await tweetProvider.loadTweets();
                 },
                 child: ListView.builder(
                   itemCount: tweetProvider.tweets.length,

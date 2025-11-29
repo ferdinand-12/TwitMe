@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/custom_button.dart';
 
@@ -14,8 +16,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _displayNameController;
   late TextEditingController _bioController;
-  late TextEditingController _profileImageController;
-  late TextEditingController _coverImageController;
+  
+  File? _profileImage;
+  File? _coverImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -25,19 +29,55 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       text: user?.displayName ?? '',
     );
     _bioController = TextEditingController(text: user?.bio ?? '');
-    _profileImageController = TextEditingController(
-      text: user?.profileImage ?? '',
-    );
-    _coverImageController = TextEditingController(text: user?.coverImage ?? '');
   }
 
   @override
   void dispose() {
     _displayNameController.dispose();
     _bioController.dispose();
-    _profileImageController.dispose();
-    _coverImageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickProfileImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _profileImage = File(image.path);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memilih gambar: $e')),
+      );
+    }
+  }
+
+  Future<void> _pickCoverImage() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _coverImage = File(image.path);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal memilih gambar: $e')),
+      );
+    }
   }
 
   void _saveProfile() {
@@ -45,8 +85,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       context.read<AuthProvider>().updateProfile(
         displayName: _displayNameController.text,
         bio: _bioController.text,
-        profileImage: _profileImageController.text,
-        coverImage: _coverImageController.text,
+        profileImage: _profileImage?.path,
+        coverImage: _coverImage?.path,
       );
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,39 +123,83 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             // Cover Image Preview
             Stack(
               children: [
-                Container(
-                  height: 150,
-                  width: double.infinity,
-                  color: Colors.grey[300],
-                  child: _coverImageController.text.isNotEmpty
-                      ? Image.network(
-                          _coverImageController.text,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(color: Colors.grey[300]);
-                          },
-                        )
-                      : null,
+                GestureDetector(
+                  onTap: _pickCoverImage,
+                  child: Container(
+                    height: 150,
+                    width: double.infinity,
+                    color: Colors.grey[300],
+                    child: _coverImage != null
+                        ? Image.file(
+                            _coverImage!,
+                            fit: BoxFit.cover,
+                          )
+                        : (user?.coverImage != null && user!.coverImage.isNotEmpty)
+                            ? (user.coverImage.startsWith('http')
+                                ? Image.network(
+                                    user.coverImage,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Colors.grey[300],
+                                        child: const Center(
+                                          child: Icon(Icons.add_photo_alternate, size: 40),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : Image.file(
+                                    File(user.coverImage),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Colors.grey[300],
+                                        child: const Center(
+                                          child: Icon(Icons.add_photo_alternate, size: 40),
+                                        ),
+                                      );
+                                    },
+                                  ))
+                            : Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: const [
+                                    Icon(Icons.add_photo_alternate, size: 40, color: Colors.grey),
+                                    SizedBox(height: 8),
+                                    Text('Tambah Foto Sampul', style: TextStyle(color: Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                  ),
                 ),
                 Positioned(
                   bottom: 16,
                   left: 16,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Theme.of(context).scaffoldBackgroundColor,
-                        width: 4,
+                  child: GestureDetector(
+                    onTap: _pickProfileImage,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).scaffoldBackgroundColor,
+                          width: 4,
+                        ),
                       ),
-                    ),
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundImage: _profileImageController.text.isNotEmpty
-                          ? NetworkImage(_profileImageController.text)
-                          : null,
-                      child: _profileImageController.text.isEmpty
-                          ? const Icon(Icons.person, size: 40)
-                          : null,
+                      child: CircleAvatar(
+                        radius: 40,
+                        backgroundColor: Colors.grey[400],
+                        backgroundImage: _profileImage != null
+                            ? FileImage(_profileImage!)
+                            : (user?.profileImage != null && user!.profileImage.isNotEmpty)
+                                ? (user.profileImage.startsWith('http')
+                                    ? NetworkImage(user.profileImage) as ImageProvider
+                                    : FileImage(File(user.profileImage)))
+                                : null,
+                        child: (_profileImage == null && 
+                               (user?.profileImage == null || user!.profileImage.isEmpty))
+                            ? const Icon(Icons.add_a_photo, size: 30, color: Colors.white)
+                            : null,
+                      ),
                     ),
                   ),
                 ),
@@ -156,38 +240,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 maxLines: 3,
                 maxLength: 160,
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Profile Image URL
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextFormField(
-                controller: _profileImageController,
-                decoration: const InputDecoration(
-                  labelText: 'URL Foto Profil',
-                  border: OutlineInputBorder(),
-                  hintText: 'https://example.com/image.jpg',
-                ),
-                onChanged: (value) => setState(() {}),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Cover Image URL
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextFormField(
-                controller: _coverImageController,
-                decoration: const InputDecoration(
-                  labelText: 'URL Foto Sampul',
-                  border: OutlineInputBorder(),
-                  hintText: 'https://example.com/cover.jpg',
-                ),
-                onChanged: (value) => setState(() {}),
               ),
             ),
 

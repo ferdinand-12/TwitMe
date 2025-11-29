@@ -82,7 +82,7 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
               const SizedBox(height: 48),
               Text(
-                isLogin ? 'Masuk ke Twitter' : 'Daftar Twitter',
+                isLogin ? 'Masuk ke TwitMe' : 'Daftar TwitMe',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
