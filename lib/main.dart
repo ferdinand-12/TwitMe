@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/tweet_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/search_provider.dart';
+import 'providers/message_provider.dart';
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -13,6 +15,8 @@ void main() {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => TweetProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => SearchProvider()),
+        ChangeNotifierProvider(create: (_) => MessageProvider()),
       ],
       child: const MyApp(),
     ),
