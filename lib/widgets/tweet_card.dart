@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/tweet_model.dart';
 import '../providers/tweet_provider.dart';
+import '../providers/auth_provider.dart';
 import '../screens/tweet_detail_screen.dart';
 import 'user_avatar.dart';
 
@@ -12,6 +14,9 @@ class TweetCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.read<AuthProvider>();
+    final currentUser = authProvider.currentUser;
+
     return InkWell(
       onTap: () {
         Navigator.push(
@@ -83,45 +88,61 @@ class TweetCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    tweet.content,
-                    style: const TextStyle(fontSize: 15, height: 1.4),
-                  ),
+
+                  const SizedBox(height: 8),
+                  Text(tweet.content),
+
                   if (tweet.images.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        tweet.images.first,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: 200,
-                      ),
+                      child: _buildImage(tweet.images.first),
                     ),
                   ],
+
                   const SizedBox(height: 12),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _ActionButton(
                         icon: Icons.chat_bubble_outline,
                         count: tweet.replies,
                         color: Colors.grey[600]!,
-                        onTap: () {},
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  TweetDetailScreen(tweet: tweet),
+                            ),
+                          );
+                        },
                       ),
                       _ActionButton(
-                        icon: tweet.isRetweeted
-                            ? Icons.repeat
-                            : Icons.repeat,
+                        icon: Icons.repeat,
                         count: tweet.retweets,
                         color: tweet.isRetweeted
                             ? Colors.green
                             : Colors.grey[600]!,
                         onTap: () {
-                          context
-                              .read<TweetProvider>()
-                              .toggleRetweet(tweet.id);
+                          if (currentUser != null) {
+                            try {
+                              context.read<TweetProvider>().toggleRetweet(
+                                tweet.id,
+                                int.parse(currentUser.id),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Gagal me-retweet: $e')),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Silakan login terlebih dahulu'),
+                              ),
+                            );
+                          }
                         },
                       ),
                       _ActionButton(
@@ -131,29 +152,25 @@ class TweetCard extends StatelessWidget {
                         count: tweet.likes,
                         color: tweet.isLiked ? Colors.red : Colors.grey[600]!,
                         onTap: () {
-                          context.read<TweetProvider>().toggleLike(tweet.id);
-                        },
-                      ),
-                      _ActionButton(
-                        icon: Icons.bar_chart,
-                        count: 0,
-                        color: Colors.grey[600]!,
-                        onTap: () {},
-                        showCount: false,
-                      ),
-                      IconButton(
-                        icon: Icon(
-                          tweet.isBookmarked
-                              ? Icons.bookmark
-                              : Icons.bookmark_border,
-                          size: 20,
-                        ),
-                        color:
-                            tweet.isBookmarked ? Colors.blue : Colors.grey[600],
-                        onPressed: () {
-                          context
-                              .read<TweetProvider>()
-                              .toggleBookmark(tweet.id);
+                          if (currentUser != null) {
+                            try {
+                              final userId = int.parse(currentUser.id);
+                              context.read<TweetProvider>().toggleLike(
+                                tweet.id,
+                                userId,
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Gagal menyukai: $e')),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Silakan login terlebih dahulu'),
+                              ),
+                            );
+                          }
                         },
                       ),
                     ],
@@ -173,6 +190,40 @@ class TweetCard extends StatelessWidget {
     if (diff.inHours > 0) return '${diff.inHours}j';
     if (diff.inMinutes > 0) return '${diff.inMinutes}m';
     return 'Baru saja';
+  }
+
+  Widget _buildImage(String imagePath) {
+
+    if (imagePath.startsWith('/') ||
+        imagePath.startsWith('file://') ||
+        !imagePath.startsWith('http')) {
+      return Image.file(
+        File(imagePath.replaceAll('file://', '')),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 200,
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.broken_image, size: 50)),
+          );
+        },
+      );
+    } else {
+
+      return Image.network(
+        imagePath,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: 200,
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.broken_image, size: 50)),
+          );
+        },
+      );
+    }
   }
 
   void _showOptionsMenu(BuildContext context) {

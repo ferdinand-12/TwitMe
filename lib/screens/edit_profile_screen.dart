@@ -120,7 +120,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         key: _formKey,
         child: ListView(
           children: [
-            // Cover Image Preview
             Stack(
               children: [
                 GestureDetector(
@@ -208,7 +207,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 24),
 
-            // Display Name
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextFormField(
@@ -228,7 +226,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 16),
 
-            // Bio
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextFormField(
@@ -245,7 +242,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 24),
 
-            // User Info (Read-only)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(

@@ -1,8 +1,9 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/auth_provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/tweet_provider.dart';
-import '../widgets/user_avatar.dart';
+import '../providers/auth_provider.dart';
 
 class ComposeTweetScreen extends StatefulWidget {
   const ComposeTweetScreen({Key? key}) : super(key: key);
@@ -12,23 +13,77 @@ class ComposeTweetScreen extends StatefulWidget {
 }
 
 class _ComposeTweetScreenState extends State<ComposeTweetScreen> {
-  final _controller = TextEditingController();
-  bool _isPosting = false;
+  final _tweetController = TextEditingController();
+  final List<String> _selectedImages = [];
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
-    _controller.dispose();
+    _tweetController.dispose();
     super.dispose();
   }
 
-  Future<void> _postTweet() async {
-    if (_controller.text.trim().isEmpty) return;
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile> images = await _picker.pickMultiImage();
+      if (images.isNotEmpty) {
+        setState(() {
+          _selectedImages.addAll(images.map((image) => image.path));
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error picking images: $e')));
+    }
+  }
 
-    setState(() => _isPosting = true);
-    await Future.delayed(const Duration(seconds: 1));
+  void _showEmojiPicker() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Container(
+          height: 250,
+          color: Colors.white,
+          child: GridView.builder(
+            padding: const EdgeInsets.all(10),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 8,
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+            ),
+            itemCount: 30,
+            itemBuilder: (context, index) {
+              final emoji = String.fromCharCode(0x1F600 + index);
+              return GestureDetector(
+                onTap: () {
+                  _tweetController.text += emoji;
+                  Navigator.pop(context);
+                },
+                child: Center(
+                  child: Text(emoji, style: const TextStyle(fontSize: 24)),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _postTweet() async {
+    if (_tweetController.text.isEmpty && _selectedImages.isEmpty) return;
+
+    final user = context.read<AuthProvider>().currentUser;
+    if (user == null) return;
+
+    await context.read<TweetProvider>().addTweet(
+      _tweetController.text,
+      user,
+      images: _selectedImages,
+    );
 
     if (mounted) {
-      context.read<TweetProvider>().addTweet(_controller.text, []);
       Navigator.pop(context);
     }
   }
@@ -45,97 +100,133 @@ class _ComposeTweetScreenState extends State<ComposeTweetScreen> {
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: ElevatedButton(
-              onPressed: _isPosting ? null : _postTweet,
+              onPressed: _postTweet,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF1DA1F2),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
               ),
-              child: _isPosting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Tweet',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
+              child: const Text('Tweet'),
             ),
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            UserAvatar(imageUrl: user?.profileImage ?? '', size: 48),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                autofocus: true,
-                maxLines: null,
-                decoration: const InputDecoration(
-                  hintText: 'Ada yang baru?',
-                  border: InputBorder.none,
-                ),
-                style: const TextStyle(fontSize: 18),
+      body: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    backgroundImage:
+                        user?.profileImage != null &&
+                            user!.profileImage.isNotEmpty
+                        ? (user.profileImage.startsWith('http')
+                              ? NetworkImage(user.profileImage) as ImageProvider
+                              : FileImage(File(user.profileImage)))
+                        : const NetworkImage('https://i.pravatar.cc/150?img=1'),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: _tweetController,
+                          maxLines: null,
+                          decoration: const InputDecoration(
+                            hintText: 'Apa yang sedang terjadi?',
+                            border: InputBorder.none,
+                          ),
+                        ),
+                        if (_selectedImages.isNotEmpty)
+                          Container(
+                            height: 100,
+                            margin: const EdgeInsets.only(top: 10),
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: _selectedImages.length,
+                              itemBuilder: (context, index) {
+                                return Stack(
+                                  children: [
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      width: 100,
+                                      height: 100,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        image: DecorationImage(
+                                          image: FileImage(
+                                            File(_selectedImages[index]),
+                                          ),
+                                          fit: BoxFit.cover,
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 0,
+                                      right: 8,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedImages.removeAt(index);
+                                          });
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(2),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.black54,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.close,
+                                            size: 16,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border(
-            top: BorderSide(
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.grey[800]!
-                  : Colors.grey[200]!,
+          ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.image_outlined,
+                    color: Color(0xFF1DA1F2),
+                  ),
+                  onPressed: _pickImages,
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.emoji_emotions_outlined,
+                    color: Color(0xFF1DA1F2),
+                  ),
+                  onPressed: _showEmojiPicker,
+                ),
+              ],
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.image_outlined, color: Color(0xFF1DA1F2)),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.gif_box_outlined, color: Color(0xFF1DA1F2)),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.poll_outlined, color: Color(0xFF1DA1F2)),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.emoji_emotions_outlined,
-                  color: Color(0xFF1DA1F2)),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.schedule_outlined, color: Color(0xFF1DA1F2)),
-              onPressed: () {},
-            ),
-            IconButton(
-              icon: const Icon(Icons.location_on_outlined,
-                  color: Color(0xFF1DA1F2)),
-              onPressed: () {},
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
